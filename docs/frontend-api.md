@@ -223,14 +223,15 @@ are TICKET_ADJUSTMENT lines (neither income nor cost), so gross ticket revenue =
 ## External data sources (0013)
 
 Per event; credentials of the services stay in the server environment (`.env`), never in the database or the API.
-Pulls run on demand and automatically while the app runs (`CONNECTORS_SYNC_INTERVAL_MINUTES`, default 60) for events
+Pulls run on demand and automatically while the app runs, each source at its own interval (`syncIntervalMinutes`; provider
+default and limits in `PROVIDER_INFO.sync`, 0 = automatic pulls off; `CONNECTORS_SYNC_INTERVAL_MINUTES=0` turns them all off) for events
 from 60 days before their start to 30 days after their end; `npm run connectors:pull` does one pass for external
 schedulers. Setup of each service: `docs/veri-kaynaklari.md`.
 
 | Method | Path | Permission | Notes |
 |---|---|---|---|
-| GET | `/api/events/:eventId/data-sources?organizationId` | org.read | `{ event, providers: [{ provider, label, feeds, terms, docs, envKeys, missingEnv, source: null \| { id, config, enabled, lastSyncAt, lastStatus: OK \| ERROR, lastError, lastSummary, observations } }] }` |
-| PUT | `/api/events/:eventId/data-sources` | data.manage | `{ organizationId, provider: OPEN_METEO_AIR \| BREVO \| GA4 \| META \| YOUTUBE \| NEWS, config, enabled? }`; config per `PROVIDER_CONFIG` (src/lib/connectors/providers.ts); a changed config deletes the old observations |
+| GET | `/api/events/:eventId/data-sources?organizationId` | org.read | `{ event, window: { from, to } \| null, providers: [{ provider, label, feeds, terms, docs, envKeys, missingEnv, sync: { defaultMinutes, minMinutes, maxMinutes, note, choices }, source: null \| { id, config, enabled, lastSyncAt, lastStatus: OK \| ERROR, lastError, lastSummary, observations, syncIntervalMinutes, syncIsDefault, nextSyncAt } }] }` |
+| PUT | `/api/events/:eventId/data-sources` | data.manage | `{ organizationId, provider: OPEN_METEO_AIR \| BREVO \| GA4 \| META \| YOUTUBE \| NEWS, config, enabled?, syncIntervalMinutes? }`; config per `PROVIDER_CONFIG` (src/lib/connectors/providers.ts); a changed config deletes the old observations (compared regardless of key order); `syncIntervalMinutes`: null = default, 0 = off, otherwise one of the provider's `sync.choices` (422 `SYNC_INTERVAL_INVALID`); omitted = unchanged |
 | POST | `/api/events/:eventId/data-sources/pull` | data.manage | `{ organizationId, provider? }` → `{ results: [{ provider, status, summary? \| error? }] }`; a provider failure is recorded on the source, never a 5xx |
 | DELETE | `/api/data-sources/:sourceId?organizationId` | data.manage | 204; its observations go with it |
 | GET | `/api/events/:eventId/mentions?organizationId` | org.read | press candidates and reviewed clippings |

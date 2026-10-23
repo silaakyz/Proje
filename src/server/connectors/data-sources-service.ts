@@ -13,7 +13,7 @@ import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { adminDb } from "@/db";
 import { dataObservations, eventDataSources, eventLeads, events, eventSponsors, mediaMentions } from "@/db/schema";
-import { MENTION_STATUSES, PROVIDER_CONFIG, PROVIDER_INFO, PROVIDERS, SYNC_WINDOW, type Provider } from "@/lib/connectors/providers";
+import { effectiveSyncMinutes, MENTION_STATUSES, PROVIDER_CONFIG, PROVIDER_INFO, PROVIDERS, SYNC_WINDOW, syncChoices, syncIntervalLabel, type Provider } from "@/lib/connectors/providers";
 import { parseLeadsCsv, parseSponsorsCsv } from "@/lib/connectors/csv";
 import type { OrgAccess } from "@/server/auth/org-access";
 import { ApiError } from "@/server/http";
@@ -60,20 +60,46 @@ export async function listDataSources(organizationId: string, eventId: string) {
     .where(and(eq(dataObservations.organizationId, organizationId), eq(dataObservations.eventId, eventId))).groupBy(dataObservations.sourceId);
   return {
     event: { city: ev.city, startDate: ev.startDate, endDate: ev.endDate, title: ev.title },
+    window: syncWindow(ev),
     providers: PROVIDERS.map((provider) => {
       const info = PROVIDER_INFO[provider];
       const row = rows.find((r) => r.provider === provider);
+      const minutes = row ? effectiveSyncMinutes(provider, row.syncIntervalMinutes) : info.sync.defaultMinutes;
       return {
         provider, label: info.label, feeds: info.feeds, terms: info.terms, docs: info.docs,
         envKeys: info.envKeys, missingEnv: info.envKeys.filter((k) => !env(k)?.trim()),
+        sync: { ...info.sync, choices: syncChoices(provider) },
         source: row ? {
           id: row.id, config: row.config, enabled: row.enabled, lastSyncAt: row.lastSyncAt, lastStatus: row.lastStatus,
           lastError: row.lastError, lastSummary: row.lastSummary, observations: counts.find((c) => c.sourceId === row.id)?.n ?? 0,
+          syncIntervalMinutes: minutes, syncIsDefault: row.syncIntervalMinutes === null,
+          nextSyncAt: nextSync(row.enabled, minutes, row.lastSyncAt, syncWindow(ev)),
         } : null,
       };
     }),
   };
 }
+
+/** Calendar days (Istanbul) in which automatic pulls run for this event, or null without a start date. */
+function syncWindow(ev: ConnectorEvent) {
+  if (!ev.startDate) return null;
+  const shift = (iso: string, days: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+  return { from: shift(ev.startDate, -SYNC_WINDOW.daysBefore), to: shift(ev.endDate ?? ev.startDate, SYNC_WINDOW.daysAfter) };
+}
+
+/** When the scheduler will pull next (approximately: it checks every few minutes); null when it will not. */
+function nextSync(enabled: boolean, minutes: number, last: Date | null, window: { from: string; to: string } | null) {
+  if (!enabled || minutes === 0 || !window) return null;
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Istanbul" }).format(new Date());
+  if (today > window.to) return null;
+  const due = last ? new Date(last.getTime() + minutes * 60_000) : new Date();
+  const opens = new Date(`${window.from}T00:00:00+03:00`);
+  return due < opens ? opens : due;
+}
+
+/** JSON with object keys sorted at every level: equal settings give equal text whatever the key order. */
+const canonical = (v: unknown): string => JSON.stringify(v, (_k, x: unknown) =>
+  x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.entries(x as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : x);
 
 // ------------------------------------------------------------------------------------------- configure
 
@@ -82,12 +108,21 @@ export const saveSourceSchema = z.object({
   provider: z.enum(PROVIDERS),
   config: z.record(z.string(), z.unknown()),
   enabled: z.boolean().default(true),
+  /** Automatic pull interval in minutes: null = provider default, 0 = off; otherwise one of the provider's choices.
+   *  Omitted = keep the current choice. */
+  syncIntervalMinutes: z.number().int().nullable().optional(),
 });
 
 export async function saveDataSource(access: OrgAccess, eventId: string, input: z.infer<typeof saveSourceSchema>) {
   await eventOf(access.organizationId, eventId);
   const parsed = PROVIDER_CONFIG[input.provider].safeParse(input.config);
   if (!parsed.success) throw parsed.error;
+  const interval = input.syncIntervalMinutes;
+  if (interval !== undefined && interval !== null && !syncChoices(input.provider).includes(interval)) {
+    const { minMinutes, maxMinutes } = PROVIDER_INFO[input.provider].sync;
+    throw new ApiError(422, `${PROVIDER_INFO[input.provider].label} için çekme sıklığı ${syncIntervalLabel(minMinutes).toLocaleLowerCase("tr-TR")} ile ${syncIntervalLabel(maxMinutes).toLocaleLowerCase("tr-TR")} arasında olmalı (veya kapalı).`, "SYNC_INTERVAL_INVALID");
+  }
+  const intervalSet = interval === undefined ? {} : { syncIntervalMinutes: interval };
   const config = parsed.data as Record<string, unknown>;
   return adminDb.transaction(async (tx) => {
     const [cur] = await tx.select().from(eventDataSources)
@@ -96,14 +131,16 @@ export async function saveDataSource(access: OrgAccess, eventId: string, input: 
     if (!cur) {
       const [row] = await tx.insert(eventDataSources).values({
         organizationId: access.organizationId, eventId, provider: input.provider, config, enabled: input.enabled, createdBy: access.userId,
+        ...intervalSet,
       }).returning();
       return row!;
     }
-    const changed = JSON.stringify(cur.config) !== JSON.stringify(config);
+    // jsonb does not keep key order: compare canonically, or re-saving the same settings would wipe the data.
+    const changed = canonical(cur.config) !== canonical(config);
     // New settings read different things: what the old ones produced no longer describes this source.
     if (changed) await tx.delete(dataObservations).where(and(eq(dataObservations.sourceId, cur.id), eq(dataObservations.organizationId, access.organizationId)));
     const [row] = await tx.update(eventDataSources).set({
-      config, enabled: input.enabled, updatedAt: new Date(),
+      config, enabled: input.enabled, updatedAt: new Date(), ...intervalSet,
       ...(changed ? { lastSyncAt: null, lastStatus: null, lastError: null, lastSummary: null } : {}),
     }).where(and(eq(eventDataSources.id, cur.id), eq(eventDataSources.organizationId, access.organizationId))).returning();
     return row!;
@@ -190,17 +227,21 @@ export async function pullEvent(organizationId: string, eventId: string, opts: P
 }
 
 /**
- * Automatic pulls: claims the enabled sources that are due (never pulled, or not within `intervalMinutes`) of events
- * inside their window (SYNC_WINDOW days around the event dates) by stamping last_sync_at in the same statement
- * (FOR UPDATE SKIP LOCKED), so two processes never pull the same source; then pulls them.
+ * Automatic pulls: claims the enabled sources that are due — never pulled, or last pulled longer ago than the source's
+ * own interval (sync_interval_minutes, else the provider default; 0 = never automatically) — of events inside their
+ * window (60 days before the start until 30 days after the end), marks them as pulled now (so a second process skips
+ * them) and pulls them one by one.
  */
-export async function pullDueSources(intervalMinutes: number, opts: PullOptions & { limit?: number } = {}) {
+export async function pullDueSources(opts: PullOptions & { limit?: number } = {}) {
+  const defaults = sql.join(PROVIDERS.map((p) => sql`when ${p} then ${PROVIDER_INFO[p].sync.defaultMinutes}::int`), sql` `);
+  const interval = sql`coalesce(d.sync_interval_minutes, case d.provider ${defaults} end)`;
   const claimed = await adminDb.execute<{ id: string; organization_id: string }>(sql`
     update event_data_sources s set last_sync_at = now()
     where s.id in (
       select d.id from event_data_sources d join events e on e.id = d.event_id and e.organization_id = d.organization_id
       where d.enabled and e.archived_at is null and e.start_date is not null
-        and (d.last_sync_at is null or d.last_sync_at < now() - make_interval(mins => ${intervalMinutes}))
+        and ${interval} > 0
+        and (d.last_sync_at is null or d.last_sync_at < now() - make_interval(mins => ${interval}))
         and (now() at time zone 'Europe/Istanbul')::date between e.start_date - ${SYNC_WINDOW.daysBefore}::int
           and coalesce(e.end_date, e.start_date) + ${SYNC_WINDOW.daysAfter}::int
       order by d.last_sync_at nulls first

@@ -1117,6 +1117,8 @@ export const eventDataSources = pgTable(
     /** Validated per provider (PROVIDER_CONFIG); identifiers and search terms only, no secrets. */
     config: jsonb("config").$type<Record<string, unknown>>().notNull(),
     enabled: boolean("enabled").notNull().default(true),
+    /** 0017: automatic pull interval in minutes chosen for this source; null = provider default, 0 = automatic pulls off. */
+    syncIntervalMinutes: integer("sync_interval_minutes"),
     lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
     /** OK | ERROR of the last pull; the error text is for the organizer (no secret is ever echoed). */
     lastStatus: text("last_status"),
@@ -1142,6 +1144,7 @@ export const eventDataSources = pgTable(
     check("event_data_sources_provider", sql`${t.provider} in ('OPEN_METEO_AIR', 'BREVO', 'GA4', 'META', 'YOUTUBE', 'NEWS')`),
     check("event_data_sources_config_object", sql`jsonb_typeof(${t.config}) = 'object'`),
     check("event_data_sources_status", sql`${t.lastStatus} is null or ${t.lastStatus} in ('OK', 'ERROR')`),
+    check("event_data_sources_sync_interval", sql`${t.syncIntervalMinutes} is null or ${t.syncIntervalMinutes} = 0 or ${t.syncIntervalMinutes} between 15 and 4320`),
     tenantReadPolicy("event_data_sources", t.organizationId),
   ],
 ).enableRLS();

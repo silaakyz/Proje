@@ -154,7 +154,8 @@ Ayda bir, bir yedeği boş bir veritabanına geri yükleyip açılıyor mu deney
 | Dış veri kaynaklarını elle çekmek | `eip run --rm migrate npm run connectors:pull` |
 
 Dış veri kaynakları (hava kalitesi, Brevo, GA4, Meta, YouTube, basın) uygulama çalıştığı sürece
-`CONNECTORS_SYNC_INTERVAL_MINUTES` aralığıyla kendiliğinden çekilir; ayrı bir zamanlayıcı gerekmez.
+her kaynağın kartında seçilen sıklıkla kendiliğinden çekilir; ayrı bir zamanlayıcı gerekmez
+(`CONNECTORS_SYNC_INTERVAL_MINUTES=0` otomatik çekmeyi kapatır).
 
 ## 10. Güvenlik özeti
 

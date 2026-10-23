@@ -4,9 +4,22 @@ Etkinlik → **Veri Kaynakları** sekmesinden her etkinlik için hangi hesabın 
 anahtarları ise yalnızca sunucudaki `.env` dosyasında durur (veritabanına veya tarayıcıya gitmez). `.env` değişince
 `npm run dev` / `npm start` yeniden başlatılmalıdır.
 
-Kaynaklar etkinlik başlangıcından 60 gün önce ile bitişinden 30 gün sonrası arasında, uygulama açıkken
-`CONNECTORS_SYNC_INTERVAL_MINUTES` (varsayılan 60) dakikada bir kendiliğinden çekilir. Bilgisayar sürekli açık
-değilse Windows Görev Zamanlayıcı'ya `npm run connectors:pull` komutunu ekleyebilirsiniz (proje klasöründe çalışmalı).
+Kaynaklar etkinlik başlangıcından 60 gün önce ile bitişinden 30 gün sonrası arasında, uygulama açıkken kendiliğinden
+çekilir. **Ne sıklıkla** çekileceği her kaynağın kartındaki "Otomatik çekme" seçiminden ayarlanır (15 dakikadan 3 güne
+kadar veya kapalı); her kaynağın önerilen bir değeri ve kotasına göre sınırları vardır:
+
+| Kaynak | Önerilen | En sık | En seyrek | Neden |
+|---|---|---|---|---|
+| Hava kalitesi | saatte bir | 15 dk | 3 gün | model verisi saatlik; günde 10.000 istek sınırı |
+| Basın taraması | 3 saatte bir | 15 dk | 3 gün | GDELT 15 dakikada bir güncellenir |
+| YouTube | 6 saatte bir | 1 saat | 3 gün | günlük 10.000 birimlik kota |
+| Instagram / Facebook | 6 saatte bir | 1 saat | 1 gün | hashtag araması yalnızca son 24 saati verir |
+| Brevo | 6 saatte bir | 30 dk | 3 gün | kampanya istatistikleri yavaş değişir |
+| GA4 | 12 saatte bir | 3 saat | 3 gün | GA4 verisi 24–48 saatte kesinleşir |
+
+"Şimdi Çek" her zaman çalışır. `CONNECTORS_SYNC_INTERVAL_MINUTES=0` otomatik çekmeyi tamamen kapatır. Bilgisayar
+sürekli açık değilse Windows Görev Zamanlayıcı'ya `npm run connectors:pull` komutunu ekleyebilirsiniz (proje klasöründe
+çalışmalı; her çalıştığında yalnızca sırası gelen kaynakları çeker).
 
 | Kaynak | Anahtar | Nereden alınır | Etkinlik ayarı |
 |---|---|---|---|

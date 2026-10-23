@@ -168,16 +168,49 @@ describe("data sources", () => {
     expect((await sourceRoute.DELETE(get({ organizationId: ORG_A }), P({ sourceId: changed.id }))).status).toBe(204);
   });
 
-  it("automatic pulls claim each due source once", async () => {
+  it("each source has its own pull interval (provider default unless chosen); limits follow the provider", async () => {
+    as(U.ownerA);
+    let list = (await sources()).providers;
+    const news = list.find((p: { provider: string }) => p.provider === "NEWS");
+    expect(news.sync).toMatchObject({ defaultMinutes: 180, minMinutes: 15, choices: [0, 15, 30, 60, 180, 360, 720, 1440, 4320] });
+    expect(news.source).toMatchObject({ syncIntervalMinutes: 180, syncIsDefault: true });
+    expect(list.find((p: { provider: string }) => p.provider === "META").sync.choices).toEqual([0, 60, 180, 360, 720, 1440]); // hashtags: last 24 h only
+    const bad = async (provider: string, config: unknown, m: number) => (await json(await sourcesRoute.PUT(
+      send("PUT", { organizationId: ORG_A, provider, config, syncIntervalMinutes: m }), P({ eventId: ev })))).body;
+    expect(await bad("NEWS", news.source.config, 45)).toMatchObject({ code: "SYNC_INTERVAL_INVALID" });
+    expect(await bad("GA4", { propertyId: "123456", landingPagePath: "/", registrationEvent: "sign_up" }, 30)).toMatchObject({ code: "SYNC_INTERVAL_INVALID" });
+    expect(await bad("META", { instagramUserId: "123456" }, 4320)).toMatchObject({ code: "SYNC_INTERVAL_INVALID" });
+    expect((await sourcesRoute.PUT(send("PUT", { organizationId: ORG_A, provider: "NEWS", config: news.source.config, syncIntervalMinutes: 15 }), P({ eventId: ev }))).status).toBe(200);
+    list = (await sources()).providers;
+    const n2 = list.find((p: { provider: string }) => p.provider === "NEWS").source;
+    expect(n2).toMatchObject({ syncIntervalMinutes: 15, syncIsDefault: false });
+    expect(n2.lastStatus).toBe("OK"); // only the interval changed: the last pull and its data are kept
+    // a later save without the field keeps the choice
+    expect((await sourcesRoute.PUT(send("PUT", { organizationId: ORG_A, provider: "NEWS", config: news.source.config, enabled: true }), P({ eventId: ev }))).status).toBe(200);
+    expect((await sources()).providers.find((p: { provider: string }) => p.provider === "NEWS").source.syncIntervalMinutes).toBe(15);
+  });
+
+  it("automatic pulls follow each source's interval and claim a due source once", async () => {
     vi.stubGlobal("fetch", network());
     await ctx.pg.query("update event_data_sources set last_sync_at = now() - interval '2 hours'");
-    const first = await svc.pullDueSources(60);
-    expect(first.map((r) => r.provider).sort()).toEqual(["BREVO", "NEWS"]);
-    expect(await svc.pullDueSources(60)).toEqual([]); // just pulled
+    // NEWS every 15 min → due; BREVO default every 6 h → not yet
+    expect((await svc.pullDueSources()).map((r) => r.provider)).toEqual(["NEWS"]);
+    expect(await svc.pullDueSources()).toEqual([]); // just pulled
+    const next = (await sources()).providers.find((p: { provider: string }) => p.provider === "NEWS").source.nextSyncAt;
+    expect(Date.parse(next) - Date.now()).toBeGreaterThan(10 * 60_000);
+    await ctx.pg.query("update event_data_sources set last_sync_at = now() - interval '7 hours'");
+    expect((await svc.pullDueSources()).map((r) => r.provider).sort()).toEqual(["BREVO", "NEWS"]);
+    // 0 = automatic pulls off for that source ("Şimdi Çek" still works)
+    const brevo = (await sources()).providers.find((p: { provider: string }) => p.provider === "BREVO").source;
+    as(U.ownerA);
+    await sourcesRoute.PUT(send("PUT", { organizationId: ORG_A, provider: "BREVO", config: brevo.config, syncIntervalMinutes: 0 }), P({ eventId: ev }));
+    await ctx.pg.query("update event_data_sources set last_sync_at = null");
+    expect((await svc.pullDueSources()).map((r) => r.provider)).toEqual(["NEWS"]);
+    expect((await sources()).providers.find((p: { provider: string }) => p.provider === "BREVO").source.nextSyncAt).toBeNull();
     // an event outside its window is not pulled
     await ctx.pg.query("update events set start_date = $2, end_date = $2 where id = $1", [ev, day(120)]);
     await ctx.pg.query("update event_data_sources set last_sync_at = null");
-    expect(await svc.pullDueSources(60)).toEqual([]);
+    expect(await svc.pullDueSources()).toEqual([]);
     await ctx.pg.query("update events set start_date = $2, end_date = $3 where id = $1", [ev, day(-2), day(-1)]);
   });
 });

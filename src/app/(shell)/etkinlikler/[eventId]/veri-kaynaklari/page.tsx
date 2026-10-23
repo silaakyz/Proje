@@ -4,11 +4,11 @@ import { useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, errorMessage } from "@/lib/api/client";
 import { keys, useDataSources, useEventMetrics, useMentions, useOrg, useUploads } from "@/lib/api/hooks";
-import type { CsvUploadResult, DataProvider, DataSourceInfo, MediaMention } from "@/lib/api/types";
+import type { CsvUploadResult, DataProvider, DataSourceInfo, DataSources, MediaMention } from "@/lib/api/types";
 import { LEAD_TEMPLATE, SPONSOR_TEMPLATE } from "@/lib/connectors/csv";
-import { PROVIDER_CONFIG } from "@/lib/connectors/providers";
+import { PROVIDER_CONFIG, syncIntervalLabel } from "@/lib/connectors/providers";
 import { EXTERNAL_FINANCE_KPI_IDS, EXTERNAL_KPI_IDS } from "@/lib/kpi/external";
-import { formatDateTime, formatNumber } from "@/lib/ui/format";
+import { formatDate, formatDateTime, formatNumber } from "@/lib/ui/format";
 import { MetricsPanel } from "@/components/eip/kpi";
 import { AppIcon, ErrorState, InlineNotice, LoadingMark, SkeletonRows, useToast } from "@/components/eip/ui";
 import { SectionHeading, useEventId } from "@/components/eip/workspace";
@@ -79,7 +79,7 @@ function toConfig(p: DataProvider, form: Record<string, string>) {
   return config;
 }
 
-function SourceCard({ info, eventCity }: { info: DataSourceInfo; eventCity: string | null }) {
+function SourceCard({ info, eventCity, syncWindow }: { info: DataSourceInfo; eventCity: string | null; syncWindow: DataSources["window"] }) {
   const eventId = useEventId();
   const { orgId, can } = useOrg();
   const qc = useQueryClient();
@@ -133,6 +133,19 @@ function SourceCard({ info, eventCity }: { info: DataSourceInfo; eventCity: stri
     }
   }
 
+  async function changeInterval(minutes: number) {
+    if (!s) return;
+    try {
+      await api(`/api/events/${eventId}/data-sources`, {
+        method: "PUT", body: { organizationId: orgId, provider: info.provider, config: s.config, enabled: s.enabled, syncIntervalMinutes: minutes },
+      });
+      toast(`${info.label}: ${syncIntervalLabel(minutes).toLocaleLowerCase("tr-TR")}.`);
+      await refresh();
+    } catch (err) {
+      toast(errorMessage(err), "error");
+    }
+  }
+
   async function toggle() {
     if (!s) return;
     try {
@@ -178,6 +191,28 @@ function SourceCard({ info, eventCity }: { info: DataSourceInfo; eventCity: stri
       </header>
       {info.missingEnv.length > 0 && (
         <InlineNotice tone="warning">Sunucuda {info.missingEnv.join(", ")} tanımlı değil. Anahtar <code>.env</code> dosyasına eklenmeden bu kaynak çekilemez.</InlineNotice>
+      )}
+      {s && (
+        <div className="data-source-sync">
+          <label htmlFor={`${info.provider}-sync`}>Otomatik çekme</label>
+          {manage ? (
+            <select id={`${info.provider}-sync`} value={s.syncIntervalMinutes} onChange={(e) => changeInterval(Number(e.target.value))}>
+              {info.sync.choices.map((m) => (
+                <option key={m} value={m}>{syncIntervalLabel(m)}{m === info.sync.defaultMinutes ? " (önerilen)" : ""}</option>
+              ))}
+            </select>
+          ) : (
+            <span>{syncIntervalLabel(s.syncIntervalMinutes)}</span>
+          )}
+          <small>
+            {!s.enabled ? "Kaynak duraklatıldı; otomatik çekme yapılmaz."
+              : s.syncIntervalMinutes === 0 ? "Yalnızca \"Şimdi Çek\" ile çekilir."
+              : s.nextSyncAt ? `Sonraki çekim yaklaşık ${formatDateTime(s.nextSyncAt)}.`
+              : syncWindow ? `Otomatik çekme ${formatDate(syncWindow.from)} – ${formatDate(syncWindow.to)} arasında yapılır; bu dönem dışında.`
+              : "Etkinliğin tarihi girilince otomatik çekme başlar."}
+            {" "}{info.sync.note}
+          </small>
+        </div>
       )}
       {s?.lastStatus === "ERROR" && s.lastError && <p className="data-source-error">{s.lastError}</p>}
       {s?.lastStatus === "OK" && s.lastSummary && <p className="data-source-summary">{s.lastSummary}</p>}
@@ -439,7 +474,7 @@ export default function DataSourcesPage() {
         : sources.isError ? <ErrorState error={sources.error} onRetry={() => sources.refetch()} />
         : (
           <div className="data-source-grid">
-            {sources.data.providers.map((p) => <SourceCard key={p.provider} info={p} eventCity={sources.data.event.city} />)}
+            {sources.data.providers.map((p) => <SourceCard key={p.provider} info={p} eventCity={sources.data.event.city} syncWindow={sources.data.window} />)}
           </div>
         )}
 

@@ -258,12 +258,20 @@ export interface Budget { items: BudgetItem[]; totals: BudgetTotals }
 export type DataProvider = "OPEN_METEO_AIR" | "BREVO" | "GA4" | "META" | "YOUTUBE" | "NEWS";
 export interface DataSourceInfo {
   provider: DataProvider; label: string; feeds: string[]; terms: string; docs: string; envKeys: string[]; missingEnv: string[];
+  /** Automatic pulls: provider default and limits (minutes), and the choices offered (0 = off). */
+  sync: { defaultMinutes: number; minMinutes: number; maxMinutes: number; note: string; choices: number[] };
   source: null | {
     id: string; config: Record<string, unknown>; enabled: boolean; lastSyncAt: string | null; lastStatus: "OK" | "ERROR" | null;
     lastError: string | null; lastSummary: string | null; observations: number;
+    syncIntervalMinutes: number; syncIsDefault: boolean; nextSyncAt: string | null;
   };
 }
-export interface DataSources { event: { city: string | null; startDate: string | null; endDate: string | null; title: string }; providers: DataSourceInfo[] }
+export interface DataSources {
+  event: { city: string | null; startDate: string | null; endDate: string | null; title: string };
+  /** Days in which automatic pulls run (60 days before the start → 30 days after the end); null without a start date. */
+  window: { from: string; to: string } | null;
+  providers: DataSourceInfo[];
+}
 export interface MediaMention {
   id: string; url: string; title: string | null; domain: string | null; publishedAt: string | null;
   foundBy: "GDELT" | "GOOGLE_NEWS" | "MANUAL"; status: "CANDIDATE" | "VERIFIED" | "REJECTED"; reviewedAt: string | null;
