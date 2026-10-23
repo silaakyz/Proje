@@ -96,6 +96,16 @@ options (each opens one or more audiences' surveys, `src/lib/surveys/roles.ts`).
 form from the OPEN surveys, asks a shared question once and stores one response per opened survey in one transaction,
 through the same validation as the per-survey link.
 
+Registration (0018): `event_registration_forms` (one per event: token, capacity, window, versioned privacy notice,
+consent text, retention) and `event_registrations` — the only table with attendees' personal data, kept apart from
+`attendees` (which stays anonymous). Each row stores the notice version + SHA-256 and the optional consent with its text;
+`purgeExpiredRegistrations` (scheduler tick) erases rows `retention_days` after the event ends. Both tables are
+server-only (RLS on, no browser grants); owner/admin read them through the server.
+
+Accounts and e-mail: `src/server/email/mailer.ts` (Brevo transactional API; links from `APP_URL`, never from the Host
+header in production), one-time password-reset links (`auth.password_resets`, hashed, 60 min), `SIGNUP_MODE=invite`
+(`src/server/auth/signup-policy.ts`), first owner via `scripts/auth/create-admin.ts`.
+
 Production (docs/canliya-alma.md): `Dockerfile` (targets `app` = Next.js standalone server as an unprivileged user,
 `tools` = migrations / seed / connector pulls), `docker-compose.prod.yml` (PostgreSQL 16 + pgvector, one-shot
 `migrate`, app, Caddy for HTTPS, nightly `pg_dump`). The app connects as the least-privilege role created by
@@ -113,6 +123,8 @@ organizations ── users (auth.users.id, one organization, role owner | admin 
 events (status, dates, ai_config = approved Blueprint profile)
   ├─ modules_registry
   ├─ attendees (ticket-type label, QR uuid, check-in state; no personal data)
+  │     └─ event_registrations (name, e-mail, phone, notice proof, consent; erased after retention)
+  ├─ event_registration_forms (public token, capacity, privacy notice version)
   ├─ ai_generations (audit of every LLM call) ── proposals (human-in-the-loop cards)
   ├─ tasks · event_kpis
   ├─ surveys (version, status, public link token) ── survey_questions
@@ -225,7 +237,7 @@ Not covered by any command here: a PostgreSQL server over the network (postgres-
 
 ## 6. Next steps
 
-1. **Frontend** for the demo flows (docs/frontend-api.md).
+1. **Frontend** for every flow (docs/frontend-api.md).
 2. **Methodology decisions** in docs/impact-open-decisions.md (sample sizes, weighting, exclusion rules,
    inflation adjustment, report narratives).
 3. **Before any deploy:** read-only check of the target database (existing `_prisma_migrations` or

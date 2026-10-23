@@ -1371,6 +1371,101 @@ export const eventDatasets = pgTable(
 ).enableRLS();
 
 // ---------------------------------------------------------------------------
+// event_registration_forms / event_registrations (0018) — the public, KVKK-compliant registration form of an event.
+// The form holds the organizer's settings and the privacy notice (aydınlatma metni, versioned); a registration holds
+// the only personal data in the platform (name, e-mail, optional phone) with the proof of the notice and of the
+// optional explicit consent, linked to the ticket (attendee) it created. Personal data is deleted after the event
+// (retention_days) or on request; the ticket stays as an anonymous count. Server-only: RLS on, a SELECT policy, no
+// browser privilege.
+// ---------------------------------------------------------------------------
+
+export const eventRegistrationForms = pgTable(
+  "event_registration_forms",
+  {
+    eventId: uuid("event_id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    token: text("token").notNull(),
+    enabled: boolean("enabled").notNull().default(false),
+    ticketType: text("ticket_type").notNull().default("Genel"),
+    capacity: integer("capacity"),
+    opensAt: timestamp("opens_at", { withTimezone: true }),
+    closesAt: timestamp("closes_at", { withTimezone: true }),
+    collectPhone: boolean("collect_phone").notNull().default(false),
+    /** Aydınlatma metni shown before submitting; a change increases notice_version. */
+    privacyNotice: text("privacy_notice").notNull(),
+    noticeVersion: integer("notice_version").notNull().default(1),
+    /** Text of the optional explicit consent (e.g. e-mails after the event); null = not asked. */
+    marketingConsentText: text("marketing_consent_text"),
+    /** Personal data of registrations is deleted this many days after the event ends. */
+    retentionDays: integer("retention_days").notNull().default(90),
+    updatedBy: uuid("updated_by"),
+    ...timestamps,
+  },
+  (t) => [
+    foreignKey({
+      name: "event_registration_forms_event_same_org_fk",
+      columns: [t.eventId, t.organizationId],
+      foreignColumns: [events.id, events.organizationId],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "event_registration_forms_updated_by_same_org_fk",
+      columns: [t.updatedBy, t.organizationId],
+      foreignColumns: [users.id, users.organizationId],
+    }).onDelete("set null"),
+    uniqueIndex("event_registration_forms_token_uq").on(t.token),
+    check("event_registration_forms_token_format", sql`${t.token} ~ '^[A-Za-z0-9_-]{32,64}$'`),
+    check("event_registration_forms_ticket_type", sql`length(trim(${t.ticketType})) between 1 and 60`),
+    check("event_registration_forms_capacity", sql`${t.capacity} is null or ${t.capacity} between 1 and 1000000`),
+    check("event_registration_forms_window", sql`${t.opensAt} is null or ${t.closesAt} is null or ${t.closesAt} > ${t.opensAt}`),
+    check("event_registration_forms_notice", sql`length(trim(${t.privacyNotice})) between 50 and 20000 and ${t.noticeVersion} >= 1`),
+    check("event_registration_forms_consent_text", sql`${t.marketingConsentText} is null or length(trim(${t.marketingConsentText})) between 10 and 1000`),
+    check("event_registration_forms_retention", sql`${t.retentionDays} between 1 and 730`),
+    tenantReadPolicy("event_registration_forms", t.organizationId),
+  ],
+).enableRLS();
+
+export const eventRegistrations = pgTable(
+  "event_registrations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    eventId: uuid("event_id").notNull(),
+    attendeeId: uuid("attendee_id").notNull().references(() => attendees.id, { onDelete: "cascade" }),
+    fullName: text("full_name").notNull(),
+    email: text("email").notNull(),
+    phone: text("phone"),
+    /** Proof of the privacy notice: which version, its sha256, when it was acknowledged. */
+    noticeVersion: integer("notice_version").notNull(),
+    noticeHash: char("notice_hash", { length: 64 }).notNull(),
+    noticeAcceptedAt: timestamp("notice_accepted_at", { withTimezone: true }).notNull(),
+    /** Optional explicit consent (açık rıza) with the exact text it was given for. */
+    marketingConsent: boolean("marketing_consent").notNull().default(false),
+    marketingConsentText: text("marketing_consent_text"),
+    marketingConsentAt: timestamp("marketing_consent_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    foreignKey({
+      name: "event_registrations_event_same_org_fk",
+      columns: [t.eventId, t.organizationId],
+      foreignColumns: [events.id, events.organizationId],
+    }).onDelete("cascade"),
+    uniqueIndex("event_registrations_attendee_uq").on(t.attendeeId),
+    uniqueIndex("event_registrations_event_email_uq").on(t.eventId, sql`lower(${t.email})`),
+    index("event_registrations_event_idx").on(t.organizationId, t.eventId),
+    check("event_registrations_name", sql`length(trim(${t.fullName})) between 2 and 200`),
+    check("event_registrations_email", sql`${t.email} ~ '^[^@[:space:]]+@[^@[:space:]]+[.][^@[:space:]]+$' and length(${t.email}) <= 320`),
+    check("event_registrations_phone", sql`${t.phone} is null or ${t.phone} ~ '^[+0-9 ()-]{7,25}$'`),
+    check("event_registrations_consent", sql`${t.marketingConsent} = (${t.marketingConsentAt} is not null) and (not ${t.marketingConsent} or ${t.marketingConsentText} is not null)`),
+    tenantReadPolicy("event_registrations", t.organizationId),
+  ],
+).enableRLS();
+
+// ---------------------------------------------------------------------------
 // event_survey_links (0015, 0016) — one public link (one QR code) per event for all of its surveys: the respondent first
 // says in which role they took part; each option opens one or more audiences' surveys (like section branching in a form
 // builder). The organizer may edit the first question and its options (0016).

@@ -64,6 +64,17 @@ create table if not exists auth.sessions (
 create index if not exists auth_sessions_user_id_idx on auth.sessions (user_id);
 create index if not exists auth_sessions_expires_at_idx on auth.sessions (expires_at);
 
+-- Password reset links (src/server/auth/password-reset.ts): sha256 of the one-time token, short expiry, used once.
+create table if not exists auth.password_resets (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  token_hash text not null unique,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  used_at timestamptz
+);
+create index if not exists auth_password_resets_user_id_idx on auth.password_resets (user_id);
+
 -- Request counters of the rate limiter: one row per key and fixed window (sliding estimate in code).
 create schema if not exists app_private;
 create table if not exists app_private.rate_limits (

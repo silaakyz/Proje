@@ -72,7 +72,6 @@ const BY_CODE: Record<string, string> = {
   INVALID_TRANSITION: "Anketin durumu bu işleme uygun değil. Sayfayı yenileyip tekrar deneyin.",
   NO_QUESTIONS: "Sorusu olmayan bir anket açılamaz.",
   NOT_CHECKED_IN: "Bu bilet için geri alınacak bir giriş yok.",
-  DEMO_DISABLED: "Demo hesabı bu ortamda tanımlı değil.",
   AI_NOT_CONFIGURED: "Yapay zekâ hizmeti yapılandırılmamış. Sunucunun .env dosyasında GOOGLE_GENERATIVE_AI_API_KEY (Gemini) veya ANTHROPIC_API_KEY (Claude) tanımlanmalı.",
   ROLE_NOT_ALLOWED: "Rolünüz bu işleme izin vermiyor.",
   LAST_OWNER: "Kurumda en az bir kurum sahibi kalmalı. Önce başka bir üyeyi kurum sahibi yapın.",
@@ -98,6 +97,16 @@ const BY_CODE: Record<string, string> = {
   DATASET_NOT_CONFIRMED: "Önce sütun eşleştirmesini onaylayın.",
   KPI_COMPUTED: "Bu KPI platform verisinden otomatik hesaplanıyor; elle değer girilemez.",
   NETWORK: "Bağlantı kurulamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.",
+  SIGNUP_INVITE_ONLY: "Kayıt yalnızca davet edilen adreslerle yapılabilir. Davet e-postasındaki bağlantıyı kullanın veya kurum yöneticinize başvurun.",
+  ORG_CREATION_CLOSED: "Yeni kurum oluşturma bu kurulumda kapalı. Bir kuruma katılmak için yöneticinizden davet isteyin.",
+  EMAIL_DISABLED: "E-posta gönderimi bu kurulumda yapılandırılmamış. Şifrenizi sıfırlamak için kurum yöneticinize başvurun.",
+  REGISTRATION_NOT_FOUND: "Bu kayıt formu bulunamadı veya kapatıldı.",
+  REGISTRATION_NOT_OPEN: "Kayıtlar henüz açılmadı.",
+  REGISTRATION_CLOSED: "Kayıtlar kapandı.",
+  REGISTRATION_FULL: "Etkinlik kontenjanı doldu.",
+  ALREADY_REGISTERED: "Bu e-posta adresiyle bu etkinliğe zaten kayıt yapılmış. Bilet bağlantınız kayıt e-postasında.",
+  NOTICE_CHANGED: "Aydınlatma metni siz formu doldururken güncellendi. Sayfayı yenileyip yeni metni okuyarak tekrar deneyin.",
+  RESET_LINK_INVALID: "Bu şifre sıfırlama bağlantısı geçersiz, kullanılmış veya süresi dolmuş. Yeni bir bağlantı isteyin.",
 };
 
 /** User-facing Turkish message for an API error (codes from docs/frontend-api.md). */

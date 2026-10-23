@@ -1,7 +1,7 @@
 # Production image of the EIP application (docs/canliya-alma.md, docker-compose.prod.yml).
 #   target "app"   — the Next.js server only (standalone output), runs as the unprivileged `node` user
 #   target "tools" — the full project with dev dependencies: migrations (scripts/db/migrate.mjs),
-#                    the app database role (scripts/db/app-role.mjs), demo:seed, connectors:pull
+#                    the app database role (scripts/db/app-role.mjs), admin:create, org:delete, connectors:pull
 ARG NODE_IMAGE=node:22-bookworm-slim
 
 FROM ${NODE_IMAGE} AS deps

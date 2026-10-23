@@ -53,6 +53,10 @@ services:
       DATABASE_URL: "postgresql://${APP_DB_USER:-eip_app}:${APP_DB_PASSWORD}@db:5432/${POSTGRES_DB:-eip}"
       DB_POOL_MAX: ${DB_POOL_MAX:-10}
       TZ: Europe/Istanbul
+      # Public address for links in e-mails; sign-up policy (invite = only invited addresses, organizations by npm run admin:create)
+      APP_URL: https://${DOMAIN}
+      SIGNUP_MODE: ${SIGNUP_MODE:-invite}
+      EMAIL_FROM: ${EMAIL_FROM:-}
       # AI (one provider is enough)
       AI_PROVIDER: ${AI_PROVIDER:-}
       GOOGLE_GENERATIVE_AI_API_KEY: ${GOOGLE_GENERATIVE_AI_API_KEY:-}

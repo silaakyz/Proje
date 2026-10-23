@@ -40,7 +40,7 @@ describe("effective browser write surface", () => {
     const tables = (await ctx.pg.query<{ t: string }>(
       "select c.relname as t from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r' order by 1")).rows.map((r) => r.t);
     expect(tables).toEqual(["ai_generations", "attendees", "budget_items", "data_observations", "event_analytics_vectors", "event_data_sources", "event_datasets",
-      "event_impact_inputs", "event_kpis", "event_leads", "event_sponsors", "event_survey_links", "events",
+      "event_impact_inputs", "event_kpis", "event_leads", "event_registration_forms", "event_registrations", "event_sponsors", "event_survey_links", "events",
       "impact_calculation_runs", "media_mentions", "modules_registry", "multiplier_sets", "multipliers", "organization_invitations", "organizations", "proposals",
       "survey_questions", "survey_response_spend", "survey_responses", "surveys", "tasks", "users"]);
 
@@ -96,7 +96,7 @@ describe("TRUNCATE (behaviour, not just the catalog)", () => {
   it("anon and authenticated cannot truncate any public table; the table owner can (control)", async () => {
     const tables = (await ctx.pg.query<{ t: string }>(
       "select c.relname as t from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r' order by 1")).rows.map((r) => r.t);
-    expect(tables).toHaveLength(27);
+    expect(tables).toHaveLength(29);
     const before = (await ctx.pg.query<{ n: number }>("select count(*)::int as n from organizations")).rows[0]!.n;
     for (const t of tables) {
       for (const role of ["anon", "authenticated"]) {

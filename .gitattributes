@@ -7,3 +7,5 @@ Dockerfile text eol=lf
 .dockerignore text eol=lf
 docker-compose*.yml text eol=lf
 deploy/** text eol=lf
+# Binary: fonts embedded in generated PDFs
+*.ttf binary

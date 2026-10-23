@@ -19,6 +19,7 @@ import { createSession, deleteSession, SESSION_COOKIE, SESSION_TTL_SECONDS, sess
 import { dummyPasswordHash, hashPassword, verifyPassword } from "@/server/auth/password";
 import { ApiError } from "@/server/http";
 import { clientKey, hashKey, hitRateLimit, RateLimitUnavailableError } from "@/server/rate-limit";
+import { hasOpenInvitation, signupMode } from "@/server/auth/signup-policy";
 
 export const credentialsSchema = z.object({
   email: z.email().max(320),
@@ -70,6 +71,10 @@ async function startSession(request: Request, user: { id: string; email: string 
 export async function signUp(request: Request, input: Credentials) {
   await enforce([[`auth:sign-up:ip:${clientKey(request)}`, LIMITS.signUpPerIp]]);
   const email = normalizeEmail(input.email);
+  // SIGNUP_MODE=invite: only addresses someone invited may create an account (src/server/auth/signup-policy.ts)
+  if (signupMode() === "invite" && !(await hasOpenInvitation(email))) {
+    throw new ApiError(403, "Sign-up is by invitation only", "SIGNUP_INVITE_ONLY");
+  }
   const passwordHash = await hashPassword(input.password);
   const inserted = await db()
     .insert(authUsers)

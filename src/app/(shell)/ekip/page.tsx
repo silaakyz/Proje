@@ -8,7 +8,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "@/lib/api/client";
-import { keys, useInvitations, useMembers, useOrg } from "@/lib/api/hooks";
+import { keys, useAuthOptions, useInvitations, useMembers, useOrg } from "@/lib/api/hooks";
 import type { Invitation, Member, Role } from "@/lib/api/types";
 import { formatDate, formatDateTime } from "@/lib/ui/format";
 import { ROLE_LABEL, ROLE_NAME } from "@/lib/ui/labels";
@@ -26,6 +26,9 @@ function InviteModal({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [link, setLink] = useState<string | null>(null);
+  const [mailed, setMailed] = useState<{ emailed: boolean; emailError?: string } | null>(null);
+  const options = useAuthOptions();
+  const canEmail = !!options.data?.passwordReset;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -33,11 +36,12 @@ function InviteModal({ onClose }: { onClose: () => void }) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setError("Geçerli bir e-posta adresi girin.");
     setBusy(true);
     try {
-      const r = await api<{ invitation: Invitation; token: string }>("/api/org/invitations", {
+      const r = await api<{ invitation: Invitation; token: string; emailed: boolean; emailError?: string }>("/api/org/invitations", {
         method: "POST",
         body: { organizationId: orgId, email: email.trim(), role: inviteRole },
       });
       setLink(inviteUrl(r.token));
+      setMailed({ emailed: r.emailed, emailError: r.emailError });
       await qc.invalidateQueries({ queryKey: keys.invitations(orgId) });
     } catch (err) {
       setError(errorMessage(err));
@@ -49,13 +53,23 @@ function InviteModal({ onClose }: { onClose: () => void }) {
   return (
     <Modal className="form-modal" labelledBy="invite-title" onClose={onClose}>
       <p className="eyebrow">EKİBE DAVET</p>
-      <h2 id="invite-title">{link ? "Davet bağlantısı hazır" : "Ekip arkadaşı davet edin"}</h2>
+      <h2 id="invite-title">{link ? (mailed?.emailed ? "Davet gönderildi" : "Davet bağlantısı hazır") : "Ekip arkadaşı davet edin"}</h2>
       {link ? (
         <div className="invite-result">
-          <p className="form-modal-note">
-            Bu bağlantıyı <strong>{email.trim()}</strong> adresine iletin. Bağlantı 7 gün geçerlidir ve yalnızca bu adresle açılan
-            hesapla kullanılabilir. Güvenliğiniz için bağlantı yalnızca şimdi gösterilir.
-          </p>
+          {mailed?.emailed ? (
+            <p className="form-modal-note">
+              Davet e-postası <strong>{email.trim()}</strong> adresine gönderildi. E-posta ulaşmazsa aşağıdaki bağlantıyı kendiniz de
+              iletebilirsiniz. Bağlantı 7 gün geçerlidir ve yalnızca bu adresle açılan hesapla kullanılabilir.
+            </p>
+          ) : (
+            <>
+              {mailed?.emailError && <InlineNotice tone="warning">E-posta gönderilemedi: {mailed.emailError} Bağlantıyı kendiniz iletin.</InlineNotice>}
+              <p className="form-modal-note">
+                Bu bağlantıyı <strong>{email.trim()}</strong> adresine iletin. Bağlantı 7 gün geçerlidir ve yalnızca bu adresle açılan
+                hesapla kullanılabilir. Güvenliğiniz için bağlantı yalnızca şimdi gösterilir.
+              </p>
+            </>
+          )}
           <div className="invite-link-box">
             <code>{link}</code>
             <button
@@ -97,7 +111,7 @@ function InviteModal({ onClose }: { onClose: () => void }) {
             </button>
             <button className="primary-button" type="submit" disabled={busy}>
               {busy && <LoadingMark />}
-              Davet Bağlantısı Oluştur
+              {canEmail ? "Davet Gönder" : "Davet Bağlantısı Oluştur"}
             </button>
           </div>
         </form>

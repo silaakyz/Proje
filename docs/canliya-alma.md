@@ -72,8 +72,6 @@ Doldurulması zorunlu olanlar: `DOMAIN`, `ACME_EMAIL`, `POSTGRES_PASSWORD`, `APP
 anahtarı (`GOOGLE_GENERATIVE_AI_API_KEY` veya `AI_PROVIDER=anthropic` + `ANTHROPIC_API_KEY`).
 Şifreler bağlantı adresinin içinde kullanıldığı için `openssl rand -hex 32` ile üretilen harf-rakam değerleri kullanın.
 
-`DEMO_EMAIL` / `DEMO_PASSWORD` **eklemeyin**: canlıda "Demo Olarak Devam Et" düğmesi görünmemeli.
-
 Google Analytics 4 bağlanacaksa servis hesabı JSON dosyasını `secrets/ga4.json` olarak koyun ve
 `GA4_SERVICE_ACCOUNT_FILE=/run/secrets/ga4.json` yazın (`secrets/` klasörü uygulamaya salt okunur bağlanır).
 
@@ -95,16 +93,47 @@ echo "alias eip='docker compose -f /opt/eip/docker-compose.prod.yml --env-file /
 Birkaç dakika içinde `https://<DOMAIN>` açılır (Caddy sertifikayı otomatik alır). Kontrol:
 `curl -s https://<DOMAIN>/api/health` → `{"ok":true}`.
 
-## 6. İlk hesap ve kurum
+## 6. İlk yönetici hesabı ve kurum
 
-`https://<DOMAIN>/giris?durum=kayit` adresinden (giriş sayfasındaki "Kayıt Olun") kayıt olun. Ardından açılan
-Kurulum sayfasında kurum adı ve türü sorulur; bu hesap kurumun **sahibi** olur. Ekip arkadaşlarını Ekip sayfasından davet edin.
-
-Sunuma hazır örnek veri istiyorsanız (canlı kurumdan ayrı bir hesapla):
+Canlıda kayıt varsayılan olarak **davetle** yapılır (`SIGNUP_MODE=invite`): yalnızca davet edilen adresler hesap
+açabilir, yeni kurumları yönetici oluşturur. İlk kurumu ve sahibini sunucuda oluşturun (şifre sorulur, ekranda görünmez):
 
 ```bash
-eip run --rm -e DEMO_EMAIL=demo@kurum.gov.tr -e DEMO_PASSWORD='<güçlü şifre>' migrate npm run demo:seed
+eip run --rm migrate npm run admin:create -- yonetici@kurum.gov.tr "Kurum Adı" MUNICIPALITY
 ```
+
+Kurum türleri: `MUNICIPALITY`, `PUBLIC_INSTITUTION`, `UNIVERSITY`, `COMPANY`, `EVENT_AGENCY`, `NONPROFIT`, `OTHER`.
+Ardından `https://<DOMAIN>/giris` adresinden giriş yapın ve ekip arkadaşlarını **Ekip** sayfasından davet edin; davet
+e-postası gönderilir (e-posta ayarlıysa), davetliler aynı adresle **Kayıt Ol** sekmesinden hesap açar.
+
+Herkesin kayıt olup kendi kurumunu kurabilmesini isterseniz `.env.production`'da `SIGNUP_MODE=open` yazın.
+
+## 6a. E-posta (davetler, şifre sıfırlama)
+
+E-postalar Brevo üzerinden gider:
+
+1. Brevo hesabında **Senders, Domains & Dedicated IPs → Senders** bölümünden gönderici adresini ekleyip doğrulayın
+   (alan adınızı doğrulamak teslim oranını artırır).
+2. **SMTP & API → API Keys** bölümünden bir anahtar oluşturun.
+3. `.env.production`: `BREVO_API_KEY=…` ve `EMAIL_FROM=Kurum Adı <bilgi@kurum.gov.tr>`; e-postalardaki bağlantılar
+   `https://<DOMAIN>` adresini kullanır (`APP_URL`, compose dosyası ayarlar).
+4. `eip up -d` ile uygulamayı yeniden başlatın. Giriş sayfasında **Şifremi unuttum** bağlantısı görünür.
+
+E-posta ayarlanmazsa sistem yine çalışır: davet bağlantısı ekranda gösterilir (siz iletirsiniz), şifre sıfırlama
+`eip run --rm migrate npm run auth:set-password -- <e-posta>` ile yapılır.
+
+## 6b. Etkinlik kayıt formu (KVKK)
+
+Katılımcılar sayfasındaki **Herkese açık kayıt formu** bölümünden açılır; bağlantı ve QR kod oradadır. Yayına almadan önce:
+
+- **Aydınlatma metni** şablonla gelir; kurumunuzun hukuk birimine okutun, iletişim adresini (KVKK başvuruları için)
+  ekleyin. Metin her değiştiğinde sürüm numarası artar; her kaydın hangi sürümü okuduğu ve metnin özeti (SHA-256)
+  saklanır.
+- **Açık rıza** (duyuru/tanıtım e-postaları) isteğe bağlıdır ve varsayılan olarak işaretsizdir; işaretleyenlerin rıza
+  metni ve zamanı kaydedilir. Kaydı rızaya bağlamayın.
+- **Saklama süresi**: kişisel veriler etkinliğin bitiminden bu kadar gün sonra otomatik silinir (bilet kaydı adsız
+  kalır, katılım sayıları bozulmaz). Kişi silinmesini isterse kayıtlar tablosundan **Sil** ile hemen silinir.
+- Kayıt verisini yalnızca kurum sahibi ve yöneticiler görür; personel görmez.
 
 ## 7. Güncelleme
 
@@ -164,7 +193,9 @@ her kaynağın kartında seçilen sıklıkla kendiliğinden çekilir; ayrı bir 
 - `.env.production` yalnızca sunucuda durur (`chmod 600`); GitHub'a gitmez.
 - Uygulama veritabanına süper kullanıcı olarak değil `eip_app` olarak bağlanır; veritabanı portu dışarı açık değildir.
 - HTTPS zorunludur (HSTS); oturum çerezleri HTTPS üzerinde `Secure` ve `HttpOnly` gönderilir.
-- Herkese açık anket bağlantıları hız sınırına tabidir; sınır sayaçları da PostgreSQL'dedir.
+- Herkese açık anket ve kayıt bağlantıları hız sınırına tabidir; sınır sayaçları da PostgreSQL'dedir.
+- Şifre sıfırlama bağlantıları tek kullanımlık ve 60 dakika geçerlidir; veritabanında yalnızca özetleri durur.
+- `SIGNUP_MODE=invite`: yalnızca davet edilen adresler hesap açabilir; dışarıdan yeni kurum kurulamaz.
 
 ## Yönetilen PostgreSQL kullanılacaksa
 

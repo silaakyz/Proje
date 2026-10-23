@@ -8,11 +8,10 @@ import { useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/
 import { api } from "@/lib/api/client";
 import type {
   Attendee, Budget, CheckInSummary, DataSources, DatasetInfo, MediaMention, UploadSummary, EventDetail, EventStatus, EventSummary, ImpactInputs, ImpactLevel, ImpactReadiness, ImpactRun, Kpi, Me,
-  EventMetrics, Invitation, KpiActual, Member, MultiplierSet, Permission, Proposal, SurveyDetail, SurveyResponse, SurveySummary, Task, TaskStatus, EventSurveyLink } from "@/lib/api/types";
+  EventMetrics, Invitation, KpiActual, Member, MultiplierSet, Permission, Proposal, SurveyDetail, SurveyResponse, SurveySummary, Task, TaskStatus, EventSurveyLink, Registration, RegistrationForm } from "@/lib/api/types";
 
 export const keys = {
   me: ["me"] as const,
-  demo: ["demo"] as const,
   events: (org: string) => ["events", org] as const,
   event: (org: string, id: string) => ["event", org, id] as const,
   tasks: (id: string) => ["tasks", id] as const,
@@ -56,14 +55,6 @@ export function useOrg() {
   };
 }
 
-export function useDemoInfo() {
-  return useQuery({
-    queryKey: keys.demo,
-    queryFn: ({ signal }) => api<{ enabled: boolean; email: string | null }>("/api/auth/demo", { signal }),
-    staleTime: Infinity,
-    retry: false,
-  });
-}
 
 export function useEvents() {
   const { orgId } = useOrg();
@@ -208,6 +199,33 @@ export function useAttendees(eventId: string, enabled = true) {
     enabled: !!orgId && enabled,
     queryFn: ({ signal }) =>
       api<{ attendees: Attendee[] }>(`/api/events/${eventId}/attendees`, { query: { organizationId: orgId }, signal }).then((r) => r.attendees),
+  });
+}
+
+/** The event's public registration form (attendee.write) and its registrations (attendee.read). */
+export function useRegistrationForm(eventId: string, enabled: boolean) {
+  const { orgId } = useOrg();
+  return useQuery({
+    queryKey: ["registration-form", eventId],
+    enabled: !!orgId && enabled,
+    queryFn: ({ signal }) => api<{ form: RegistrationForm }>(`/api/events/${eventId}/registration-form`, { query: { organizationId: orgId }, signal }).then((r) => r.form),
+  });
+}
+export function useRegistrations(eventId: string, enabled: boolean) {
+  const { orgId } = useOrg();
+  return useQuery({
+    queryKey: ["registrations", eventId],
+    enabled: !!orgId && enabled,
+    queryFn: ({ signal }) => api<{ registrations: Registration[] }>(`/api/events/${eventId}/registrations`, { query: { organizationId: orgId }, signal }).then((r) => r.registrations),
+  });
+}
+
+/** What the sign-in page offers (public): open or invite-only sign-up, password reset by e-mail (= e-mail configured). */
+export function useAuthOptions() {
+  return useQuery({
+    queryKey: ["auth-options"],
+    queryFn: ({ signal }) => api<{ signUp: "open" | "invite"; passwordReset: boolean }>("/api/auth/options", { signal }),
+    staleTime: 5 * 60_000,
   });
 }
 

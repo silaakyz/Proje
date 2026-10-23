@@ -1,5 +1,5 @@
 /**
- * The demo API surface the frontend uses (session/onboarding, events, AI read endpoints, attendees + QR +
+ * The API surface the frontend uses (session/onboarding, events, AI read endpoints, attendees + QR +
  * check-in incl. the SSE feed, impact gate, tasks/KPIs), called as Route Handlers with real Request
  * objects on PGlite with all migrations (0000–0007).
  *  - Sign-in is simulated at the src/db seam (getUserDb / getVerifiedClaims); everything below it is real:
@@ -395,7 +395,7 @@ it("GET proposals: expires stale pending proposals but keeps future proposals pe
 
 });
 
-describe("AI demo flow: blueprint → generation status → proposal card → apply → event → sections", () => {
+describe("AI flow: blueprint → generation status → proposal card → apply → event → sections", () => {
   it("runs end to end through the read endpoints the frontend polls", async () => {
     as(U.ownerA);
     const start = await blueprintRoute.POST(req("POST", { organizationId: ORG_A, prompt: "Nisan 2027'de Adana'da 3 günlük portakal çiçeği festivali, 20 bin kişi." }));

@@ -28,6 +28,15 @@ export const authSessions = auth.table("sessions", {
   userAgent: text("user_agent"),
 });
 
+export const authPasswordResets = auth.table("password_resets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+});
+
 const appPrivate = pgSchema("app_private");
 
 export const rateLimits = appPrivate.table(

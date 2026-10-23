@@ -20,7 +20,7 @@ import { ApiError } from "@/server/http";
 export const registerSchema = z.object({
   organizationId: z.uuid(),
   ticketType: z.string().trim().min(1).max(60),
-  /** How many tickets of this type to issue at once (box office / demo seeding). */
+  /** How many tickets of this type to issue at once (box office, bulk issue). */
   quantity: z.number().int().min(1).max(500).default(1),
 });
 export const cancelTicketsSchema = z.object({

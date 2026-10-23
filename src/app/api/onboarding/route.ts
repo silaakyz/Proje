@@ -5,7 +5,8 @@
 import { getVerifiedClaims, UnauthenticatedError } from "@/db";
 import { permissionsFor } from "@/server/auth/org-access";
 import { createOrganizationForUser, onboardingSchema } from "@/server/org/onboarding";
-import { toErrorResponse } from "@/server/http";
+import { ApiError, toErrorResponse } from "@/server/http";
+import { signupMode } from "@/server/auth/signup-policy";
 
 export const runtime = "nodejs";
 
@@ -18,6 +19,8 @@ export async function POST(req: Request): Promise<Response> {
       if (e instanceof UnauthenticatedError) return Response.json({ error: "Not signed in" }, { status: 401 });
       throw e;
     }
+    // SIGNUP_MODE=invite: new organizations are created by an administrator (npm run admin:create), not here
+    if (signupMode() === "invite") throw new ApiError(403, "Creating organizations is closed", "ORG_CREATION_CLOSED");
     const input = onboardingSchema.parse(await req.json().catch(() => null));
     const m = await createOrganizationForUser(claims, input);
     return Response.json({

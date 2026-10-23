@@ -303,3 +303,20 @@ export interface DatasetInfo {
   confirmedAt: string | null; createdAt: string;
 }
 export interface DatasetUploadResult { id: string; sheets: string[]; sheet: string; rows: number; columns: number; droppedColumns: { header: string; reason: string }[]; notes: string[] }
+
+/** Public KVKK-compliant registration form (0018). */
+export type RegistrationState = "open" | "not_enabled" | "not_yet" | "closed" | "full" | "event_over";
+export interface RegistrationForm {
+  token: string; enabled: boolean; ticketType: string; capacity: number | null; opensAt: string | null; closesAt: string | null;
+  collectPhone: boolean; privacyNotice: string; noticeVersion: number; marketingConsentText: string | null; retentionDays: number;
+  registered: number; state: RegistrationState; defaults: { privacyNotice: string; marketingConsentText: string };
+}
+export interface Registration {
+  id: string; fullName: string; email: string; phone: string | null; noticeVersion: number; noticeAcceptedAt: string;
+  marketingConsent: boolean; marketingConsentAt: string | null; createdAt: string; ticketType: string; isCheckedIn: boolean; cancelledAt: string | null;
+}
+export interface PublicRegistrationForm {
+  eventTitle: string; organization: string; startDate: string | null; endDate: string | null; city: string | null; ticketType: string;
+  collectPhone: boolean; privacyNotice: string; noticeVersion: number; marketingConsentText: string | null; state: RegistrationState;
+  opensAt: string | null; closesAt: string | null;
+}

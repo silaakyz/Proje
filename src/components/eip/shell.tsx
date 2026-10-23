@@ -7,7 +7,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/api/client";
-import { useDemoInfo, useEventDetail, useMe, useOrg } from "@/lib/api/hooks";
+import { useEventDetail, useMe, useOrg } from "@/lib/api/hooks";
 import { ROLE_LABEL } from "@/lib/ui/labels";
 import { AppIcon, ErrorState, type IconName } from "@/components/eip/ui";
 import type { Permission } from "@/lib/api/types";
@@ -41,10 +41,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname() ?? "";
   const qc = useQueryClient();
   const { orgName, role, email, can } = useOrg();
-  const demo = useDemoInfo();
   const eventId = useCurrentEventId();
   const event = useEventDetail(eventId);
-  const isDemo = !!demo.data?.enabled && !!email && demo.data.email?.toLowerCase() === email.toLowerCase();
   const [signingOut, setSigningOut] = useState(false);
 
   const main: { label: string; path: string; icon: IconName }[] = [
@@ -81,8 +79,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           <span>KURUM</span>
           <p className="organization-name" title={orgName}>{orgName}</p>
         </div>
-        <p className="demo-session-label">
-          {isDemo ? "DEMO OTURUMU · " : ""}
+        <p className="session-role-label">
           {role ? ROLE_LABEL[role] : ""}
         </p>
         <nav className="primary-nav" aria-label="Ana menü">
@@ -121,7 +118,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         )}
       </div>
       <div className="sidebar-account">
-        <span>{isDemo ? "DEMO HESABI" : "HESAP"}</span>
+        <span>HESAP</span>
         <p title={email ?? undefined}>{email}</p>
         <button type="button" onClick={signOut} disabled={signingOut}>
           <AppIcon name="logout" />

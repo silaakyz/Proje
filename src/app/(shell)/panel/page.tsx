@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useArchivedEvents, useDemoInfo, useEvents, useOrg, useTasks } from "@/lib/api/hooks";
+import { useArchivedEvents, useEvents, useOrg, useTasks } from "@/lib/api/hooks";
 import type { EventStatus, EventSummary } from "@/lib/api/types";
 import { daysUntil, formatDate, formatDateRange, formatDateTime } from "@/lib/ui/format";
 import { EVENT_STATUS_BADGE, EVENT_STATUS_LABEL, PRIORITY_LABEL, ROLE_LABEL } from "@/lib/ui/labels";
@@ -70,8 +70,7 @@ function UpcomingTasks({ event }: { event: EventSummary | null }) {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { orgName, role, email, can } = useOrg();
-  const demo = useDemoInfo();
+  const { orgName, role, can } = useOrg();
   const active = useEvents();
   const [filter, setFilter] = useState<Filter>("all");
   const archived = useArchivedEvents(filter === "archived");
@@ -79,7 +78,6 @@ export default function DashboardPage() {
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mobileDetail, setMobileDetail] = useState(false);
-  const isDemo = !!demo.data?.enabled && !!email && demo.data.email?.toLowerCase() === email.toLowerCase();
 
   const all = useMemo(() => events.data ?? [], [events.data]);
   const counts = useMemo(
@@ -114,7 +112,7 @@ export default function DashboardPage() {
         <div>
           <p className="eyebrow">
             {orgName.toLocaleUpperCase("tr-TR")}
-            {isDemo ? " · DEMO KURULUŞ" : ""} · {role ? ROLE_LABEL[role] : ""}
+             · {role ? ROLE_LABEL[role] : ""}
           </p>
           <h1>Etkinlikleriniz</h1>
         </div>
@@ -131,12 +129,6 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      {isDemo && (
-        <div className="demo-mode-notice">
-          <strong>Demo oturumu</strong>
-          <span>Sunum için hazırlanmış örnek kurum verileri gösteriliyor; yaptığınız değişiklikler bu demo kurumuna kaydedilir.</span>
-        </div>
-      )}
 
       <div className="dashboard-tools">
         <div className="segment-control" role="tablist" aria-label="Etkinlik durumunu filtrele">

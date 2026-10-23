@@ -1,4 +1,4 @@
-# Frontend API (demo surface)
+# Frontend API
 
 All routes are Next.js Route Handlers under `/api`, same origin. The httpOnly session cookie `eip_session`
 (or `Authorization: Bearer <session.accessToken>` for API clients) identifies the caller; identity is never
@@ -25,7 +25,14 @@ or another organization's resource (indistinguishable) · `400` invalid input (`
 | POST | `/api/account/password` | `{ currentPassword, newPassword }` → `{ endedSessions }`; ends the account's other sessions. 403 `WRONG_PASSWORD`. |
 | GET / DELETE | `/api/account/sessions` | number of active sessions / sign out everywhere else. |
 | GET | `/api/me` | `{ user, membership: { organization, role, permissions } \| null }`. `null` → show onboarding. |
-| POST | `/api/onboarding` | `{ organizationName, organizerType? }` → 201, caller becomes owner. 409 `ALREADY_MEMBER`. |
+| POST | `/api/onboarding` | `{ organizationName, organizerType? }` → 201, caller becomes owner. 409 `ALREADY_MEMBER`; 403 `ORG_CREATION_CLOSED` when `SIGNUP_MODE=invite`. |
+| GET | `/api/auth/options` | `{ signUp: "open" \| "invite", passwordReset: boolean }` — what the sign-in page offers. |
+| POST | `/api/auth/password-reset` | `{ email }` → 202 always (unknown addresses are not revealed); e-mails a one-time link `/sifre-yenile#<token>` valid 60 minutes. 503 `EMAIL_DISABLED` without e-mail settings; 429 `RATE_LIMITED`. |
+| POST | `/api/auth/password-reset/confirm` | `{ token, password }` → 204; ends every session of the account. 400 `RESET_LINK_INVALID` (unknown, used or expired). |
+
+`SIGNUP_MODE=invite` (production default): `sign-up` only for addresses with an open invitation (403
+`SIGNUP_INVITE_ONLY`), no new organizations from the browser — the first owner is created with
+`npm run admin:create`. Invitations are e-mailed when `BREVO_API_KEY` + `EMAIL_FROM` are set (response `emailed`).
 
 ## Events
 
@@ -54,9 +61,6 @@ or another organization's resource (indistinguishable) · `400` invalid input (`
 Workspace assistant (read-only, org.read): `POST /api/ai/assistant { organizationId, eventId?, mode: "chat" | "report",
 messages: [{ role, content }] }` streams plain Turkish text grounded in the caller's recorded data (counts only, no
 personal data). It never writes. Every AI route answers 503 `AI_NOT_CONFIGURED` when the selected provider's key (`GOOGLE_GENERATIVE_AI_API_KEY` or `ANTHROPIC_API_KEY`) is unset.
-
-Demo sign-in: `GET /api/auth/demo` → `{ enabled, email }`; `POST /api/auth/demo` signs in as `DEMO_EMAIL` with the
-server-side `DEMO_PASSWORD` (404 `DEMO_DISABLED` when unset).
 
 ## Planning
 
@@ -140,6 +144,30 @@ respondents. Per-survey links (`/anket/:token`) keep working.
 | POST | `/api/events/:eventId/survey-link` | survey.manage | `{ organizationId, action: "open_all" }` → `{ opened, skipped: [{ audience, reason }], link }`: opens the latest DRAFT of every audience with no open survey |
 | GET | `/api/public/event-surveys/:token` | public | `{ survey: { eventTitle, roleQuestion: { text, helpText, options: [{ value, label }] }, routes: [{ key, audiences }], sections: [{ audience, title, intro, version, questions }] } }`; 404 unknown link, 409 `SURVEY_NOT_OPEN` |
 | POST | `/api/public/event-surveys/:token/responses` | public | `{ role: route key, answers, sensitiveConsent? }` → 201; one response per opened survey; 409 `SURVEY_NOT_OPEN`, 422 `INVALID_ANSWERS` (nothing stored); same rate limit as the per-survey link |
+
+## Public registration form — KVKK (0018)
+
+One form per event, created disabled with a privacy-notice (aydınlatma metni) template filled with the organization and
+event names. Every registration stores the notice version and its SHA-256 hash (proof of what the person read) and the
+optional marketing consent (unticked by default) with its exact text and time. A registration creates an attendee with a
+QR ticket; the ticket link is e-mailed when e-mail is configured. Personal data is erased automatically `retentionDays`
+after the event ends (scheduler tick) or on request (organizer); the ticket row stays, without the name.
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/api/events/:eventId/registration-form?organizationId` | attendee.write | `{ form: { token, enabled, ticketType, capacity, opensAt, closesAt, collectPhone, privacyNotice, noticeVersion, marketingConsentText, retentionDays, registered, state } }`; page: `/kayit/:token` |
+| PUT | `/api/events/:eventId/registration-form` | attendee.write | same fields + `organizationId`; changing the notice text raises `noticeVersion` |
+| GET | `/api/events/:eventId/registrations?organizationId` | attendee.read | `{ registrations: [{ id, fullName, email, phone, ticketType, isCheckedIn, noticeVersion, marketingConsent, createdAt }] }` |
+| DELETE | `/api/registrations/:registrationId?organizationId` | attendee.write | 204; erases the personal data (KVKK m. 7 / m. 11 request) |
+| GET | `/api/public/registrations/:token` | public | `{ form: { eventTitle, organization, city, startDate, endDate, collectPhone, privacyNotice, noticeVersion, marketingConsentText, state } }`; 404 when disabled or unknown |
+| POST | `/api/public/registrations/:token` | public | `{ fullName, email, phone?, noticeVersion, noticeAccepted: true, marketingConsent? }` → 201 `{ ticket: { qrToken, ticketType, emailed } }`; 409 `REGISTRATION_NOT_OPEN` / `REGISTRATION_CLOSED` / `REGISTRATION_FULL` / `ALREADY_REGISTERED` / `NOTICE_CHANGED`; rate limited |
+| GET | `/api/public/tickets/:qrToken` | public | `{ ticket: { eventTitle, startDate, endDate, fullName, ticketType, isCheckedIn, cancelled } }`; page: `/bilet/:qrToken` |
+
+## Event report (PDF)
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| POST | `/api/events/:eventId/report` | org.read | `{ organizationId, summary? }` → `application/pdf` (attachment): attendance, tasks, KPIs (engine / manual / no data), surveys, budget totals (budget.read only), latest stored impact run with its checks; `summary` (the assistant's draft) is appended as a labelled annex. Nothing is estimated in the report. |
 
 ## Impact
 

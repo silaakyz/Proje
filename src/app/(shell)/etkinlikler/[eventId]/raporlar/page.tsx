@@ -21,6 +21,8 @@ export default function ReportsPage() {
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfError, setPdfError] = useState("");
   const { copied, copy } = useCopy();
   const abort = useRef<AbortController | null>(null);
   useEffect(() => () => abort.current?.abort(), []);
@@ -47,12 +49,52 @@ export default function ReportsPage() {
 
   const latest = runs.data?.[0];
 
+  /** The PDF is built on the server from stored records; the draft (if any) is appended as a labelled annex. */
+  async function downloadPdf() {
+    setPdfBusy(true);
+    setPdfError("");
+    try {
+      const res = await fetch(`/api/events/${eventId}/report`, {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ organizationId: orgId, summary: draft || null }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(typeof body?.error === "string" ? body.error : `Rapor oluşturulamadı (HTTP ${res.status}).`);
+      }
+      const name = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") ?? "")?.[1] ?? "etkinlik-raporu.pdf";
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(await res.blob());
+      a.download = name;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    } catch (e) {
+      setPdfError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPdfBusy(false);
+    }
+  }
+
   return (
     <div className="reports-content">
       <section className="placeholder-hero">
         <p className="eyebrow">RAPORLAR</p>
         <h2>Paylaşılabilir çıktılar</h2>
         <p>Yönetim özeti, kayıtlı verilerden taslak olarak hazırlanır. Ekonomik etki bölümleri yalnızca kayıtlı hesaplamalara atıf yapar.</p>
+      </section>
+
+      <section className="report-pdf">
+        <div>
+          <h3>Etkinlik raporu (PDF)</h3>
+          <p className="muted-text">
+            Katılım, görevler, KPI'lar, anketler ve son etki hesaplaması; bütçe yalnızca bütçeyi görebilen rollerin raporunda yer alır.
+            {draft ? " Hazırladığınız yönetim özeti taslağı rapora ek olarak eklenir." : " Yönetim özeti taslağı hazırlarsanız rapora ek olarak eklenir."}
+          </p>
+          {pdfError && <InlineNotice tone="error">{pdfError}</InlineNotice>}
+        </div>
+        <button className="primary-button" type="button" onClick={downloadPdf} disabled={pdfBusy || busy}>
+          {pdfBusy ? <LoadingMark /> : <AppIcon name="download" />}
+          PDF Rapor İndir
+        </button>
       </section>
 
       <div className="placeholder-preview-grid overview-stats">

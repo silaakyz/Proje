@@ -34,7 +34,8 @@ create schema extensions authorization <app role>; create extension vector with 
 | `DATABASE_URL` | `postgresql://eip:<password>@localhost:5432/eip` (percent-encode `@`, `#`, `ı` … in the password) |
 | `DIRECT_URL` | optional; migrations/preflight connection if it must differ from `DATABASE_URL` |
 | `AI_PROVIDER`, `GOOGLE_GENERATIVE_AI_API_KEY` | AI routes (`/api/ai/*`) with Gemini (free tier, https://aistudio.google.com); or `AI_PROVIDER=anthropic` + `ANTHROPIC_API_KEY` |
-| `DEMO_EMAIL`, `DEMO_PASSWORD` | optional demo account (sign-in page button, `npm run demo:seed`) |
+| `SIGNUP_MODE` | `open` (default: anyone may sign up and create an organization) or `invite` (production) |
+| `BREVO_API_KEY`, `EMAIL_FROM`, `APP_URL` | optional e-mail: invitations, password reset, registration tickets |
 
 ## 3. Database
 
@@ -42,7 +43,7 @@ create schema extensions authorization <app role>; create extension vector with 
 npm install
 npm run db:preflight     # READ-ONLY: prerequisites, existing tables, migration state, 0006 stop conditions
 npm run drizzle:migrate  # scripts/db/bootstrap.sql (idempotent), then every pending drizzle/ migration in ONE transaction
-npm run demo:seed        # optional: demo account + sample organization and events
+npm run admin:create -- you@example.com "Kurum adı" MUNICIPALITY   # first owner (asks for the password)
 ```
 
 `bootstrap.sql` creates what a managed platform used to provide: pgvector in schema `extensions`, the roles
@@ -56,7 +57,7 @@ npm run dev
 curl -s -c jar -X POST localhost:3000/api/auth/sign-up -H 'content-type: application/json' -d '{"email":"a@example.com","password":"…"}'
 curl -s -c jar -X POST localhost:3000/api/auth/sign-in -H 'content-type: application/json' -d '{"email":"a@example.com","password":"…"}'
 curl -s -b jar localhost:3000/api/me                                  # membership: null → onboard
-curl -s -b jar -X POST localhost:3000/api/onboarding -H 'content-type: application/json' -d '{"organizationName":"Demo Belediyesi","organizerType":"MUNICIPALITY"}'
+curl -s -b jar -X POST localhost:3000/api/onboarding -H 'content-type: application/json' -d '{"organizationName":"Örnek Belediyesi","organizerType":"MUNICIPALITY"}'
 ```
 
 Instead of the cookie jar, send `Authorization: Bearer <session.accessToken>` from the sign-in response.

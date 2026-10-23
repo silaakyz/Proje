@@ -242,7 +242,9 @@ describe("ORG_PERMISSIONS ↔ RLS parity", () => {
     expect(actual).toEqual({
       "ai/assistant": ["org.read"],
       "ai/blueprint": ["blueprint.generate"],
-      "auth/demo": [], // public: demo account from server env (off when DEMO_* unset)
+      "auth/options": [], // public: which sign-in features are on (no secrets)
+      "auth/password-reset": [], // public: send a reset link (rate limited; silent for unknown addresses)
+      "auth/password-reset/confirm": [], // public: the one-time token is the key
       "auth/sign-in": [], // public: email + password (rate limited)
       "auth/sign-out": [], // session only
       "auth/sign-up": [], // public: email + password (rate limited)
@@ -254,6 +256,9 @@ describe("ORG_PERMISSIONS ↔ RLS parity", () => {
       "datasets/[datasetId]": ["data.manage"],
       "datasets/[datasetId]/interpret": ["data.manage"],
       "events/[eventId]/datasets": ["data.manage", "org.read"],
+      "events/[eventId]/report": ["org.read"], // budget section only with budget.read
+      "events/[eventId]/registration-form": ["attendee.write"],
+      "events/[eventId]/registrations": ["attendee.read"],
       "events/[eventId]/survey-link": ["survey.manage"],
       "mentions/[mentionId]": ["data.manage"],
       "events/[eventId]/data-sources": ["data.manage", "org.read"],
@@ -302,6 +307,9 @@ describe("ORG_PERMISSIONS ↔ RLS parity", () => {
       "onboarding": [], // session only: creates the caller's organization
       "proposals": ["org.read"],
       "proposals/[proposalId]": ["proposal.decide"],
+      "registrations/[registrationId]": ["attendee.write"],
+      "public/registrations/[token]": [], // public: the KVKK registration form (rate limited)
+      "public/tickets/[token]": [], // public: the ticket page; the QR token is the key
       "public/surveys/[token]": [], // public: no session; the survey's link token is the only key
       "public/surveys/[token]/responses": [], // public: anonymous submission to an OPEN survey
       "public/event-surveys/[token]": [], // public: the event's single link (role first, then that role's questions)

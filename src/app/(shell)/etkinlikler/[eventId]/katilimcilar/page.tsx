@@ -9,6 +9,7 @@ import type { Attendee, Ticket } from "@/lib/api/types";
 import { formatDateTime, formatNumber, ticketCode } from "@/lib/ui/format";
 import { AppIcon, EmptyState, ErrorState, LoadingMark, Modal, SkeletonRows, StatusBadge, useToast } from "@/components/eip/ui";
 import { useEventId } from "@/components/eip/workspace";
+import { RegistrationSection } from "@/components/eip/registration";
 
 const DEFAULT_TYPES = ["Genel", "Öğrenci", "Davetli", "Basın"];
 const PAGE = 100;
@@ -196,6 +197,8 @@ export default function ParticipantsPage() {
           </form>
         </section>
       )}
+
+      <RegistrationSection eventId={eventId} eventTitle={event.data?.title ?? ""} canWrite={canWrite} />
 
       <div className="ticket-summary">
         <div>

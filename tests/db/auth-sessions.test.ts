@@ -70,7 +70,7 @@ describe("bootstrap.sql", () => {
   });
 
   it("keeps auth and rate-limit tables away from the RLS roles", async () => {
-    for (const table of ["auth.users", "auth.sessions", "app_private.rate_limits"]) {
+    for (const table of ["auth.users", "auth.sessions", "auth.password_resets", "app_private.rate_limits"]) {
       expect(await outcome(ctx.as(U.ownerA, (tx) => tx.execute(sql.raw(`select * from ${table}`))))).toMatch(/permission denied/);
     }
     // auth.uid() still works for the policies
