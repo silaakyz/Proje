@@ -1,0 +1,21 @@
+/**
+ * GET /api/events/:eventId/checkins?organizationId=… — check-in counter: totals, per ticket type, the
+ * 20 latest check-ins (checkin.perform). Polling fallback for the live feed (…/checkins/stream).
+ */
+import { requireOrgPermission } from "@/server/auth/org-access";
+import { checkInSummary } from "@/server/logistics/checkin";
+import { uuidParam, uuidSegment } from "@/server/http-params";
+import { toErrorResponse } from "@/server/http";
+
+export const runtime = "nodejs";
+
+export async function GET(req: Request, { params }: { params: Promise<{ eventId: string }> }): Promise<Response> {
+  try {
+    const eventId = await uuidSegment(params, "eventId");
+    const organizationId = uuidParam(req, "organizationId");
+    await requireOrgPermission(organizationId, "checkin.perform");
+    return Response.json({ summary: await checkInSummary(organizationId, eventId) }, { headers: { "cache-control": "no-store" } });
+  } catch (e) {
+    return toErrorResponse(e);
+  }
+}

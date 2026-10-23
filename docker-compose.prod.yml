@@ -1,0 +1,124 @@
+# Production on one Linux server: PostgreSQL 16 + pgvector, the application, automatic HTTPS (Caddy) and daily
+# database backups. Step-by-step guide: docs/canliya-alma.md
+#
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# Only Caddy publishes ports (80/443). The database and the application are reachable inside the `internal` network
+# only. The database superuser (POSTGRES_USER) runs migrations; the application connects as the least-privilege role
+# APP_DB_USER, created and re-granted by the `migrate` service on every start (scripts/db/app-role.mjs).
+# Passwords go into URLs: use URL-safe values (openssl rand -hex 32).
+name: eip
+
+x-db-owner-url: &owner-url "postgresql://${POSTGRES_USER:-eip_owner}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.production}@db:5432/${POSTGRES_DB:-eip}"
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-eip_owner}
+      POSTGRES_DB: ${POSTGRES_DB:-eip}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.production}
+      TZ: Europe/Istanbul
+    volumes:
+      - eip-pgdata:/var/lib/postgresql/data
+    shm_size: 256mb
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks: [internal]
+
+  # One-shot: bootstrap + migrations, then the application role and its grants. The app starts only if this succeeds.
+  migrate:
+    build: { context: ., target: tools }
+    image: eip-tools:latest
+    environment:
+      DATABASE_URL: *owner-url
+      DIRECT_URL: *owner-url
+      APP_DB_USER: ${APP_DB_USER:-eip_app}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env.production}
+    command: ["sh", "-c", "node scripts/db/migrate.mjs && node scripts/db/app-role.mjs"]
+    depends_on:
+      db: { condition: service_healthy }
+    restart: "no"
+    networks: [internal]
+
+  app:
+    build: { context: ., target: app }
+    image: eip-app:latest
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "postgresql://${APP_DB_USER:-eip_app}:${APP_DB_PASSWORD}@db:5432/${POSTGRES_DB:-eip}"
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
+      TZ: Europe/Istanbul
+      # AI (one provider is enough)
+      AI_PROVIDER: ${AI_PROVIDER:-}
+      GOOGLE_GENERATIVE_AI_API_KEY: ${GOOGLE_GENERATIVE_AI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_MODEL_EVENT_BUILDER: ${AI_MODEL_EVENT_BUILDER:-}
+      AI_MODEL_IMPACT_NARRATIVE: ${AI_MODEL_IMPACT_NARRATIVE:-}
+      AI_MODEL_ASSISTANT: ${AI_MODEL_ASSISTANT:-}
+      AI_MODEL_DATA_ANALYSIS: ${AI_MODEL_DATA_ANALYSIS:-}
+      AI_MODEL_FALLBACK: ${AI_MODEL_FALLBACK:-}
+      AI_THINKING_LEVEL: ${AI_THINKING_LEVEL:-}
+      # External data sources (optional)
+      BREVO_API_KEY: ${BREVO_API_KEY:-}
+      GA4_SERVICE_ACCOUNT_FILE: ${GA4_SERVICE_ACCOUNT_FILE:-}
+      META_ACCESS_TOKEN: ${META_ACCESS_TOKEN:-}
+      META_GRAPH_VERSION: ${META_GRAPH_VERSION:-}
+      YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}
+      CONNECTORS_SYNC_INTERVAL_MINUTES: ${CONNECTORS_SYNC_INTERVAL_MINUTES:-60}
+      NLP_WEBHOOK_SECRET: ${NLP_WEBHOOK_SECRET:-}
+    volumes:
+      - ./secrets:/run/secrets:ro # e.g. the GA4 service-account JSON (GA4_SERVICE_ACCOUNT_FILE=/run/secrets/ga4.json)
+    depends_on:
+      db: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    networks: [internal]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env.production}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env.production}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [app]
+    networks: [internal]
+
+  # Daily pg_dump (custom format) into ./backups, older ones removed after BACKUP_KEEP_DAYS.
+  backup:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-eip_owner}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-eip}
+      BACKUP_HOUR: ${BACKUP_HOUR:-3}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+      TZ: Europe/Istanbul
+    entrypoint: ["/bin/sh", "/deploy/backup.sh"]
+    volumes:
+      - ./deploy/backup.sh:/deploy/backup.sh:ro
+      - ./backups:/backups
+    depends_on:
+      db: { condition: service_healthy }
+    networks: [internal]
+
+volumes:
+  eip-pgdata:
+  caddy-data:
+  caddy-config:
+
+networks:
+  internal:

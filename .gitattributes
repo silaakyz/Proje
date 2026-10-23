@@ -1,0 +1,9 @@
+# Migration SQL must be byte-identical on every OS: drizzle records sha256(file) in
+# drizzle.__drizzle_migrations and the 0006 rollback checks that hash. Never convert to CRLF.
+*.sql text eol=lf
+# Run on the Linux server inside containers: CRLF would break them (e.g. "set: Illegal option -" in sh).
+*.sh text eol=lf
+Dockerfile text eol=lf
+.dockerignore text eol=lf
+docker-compose*.yml text eol=lf
+deploy/** text eol=lf

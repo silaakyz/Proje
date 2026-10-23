@@ -1,0 +1,28 @@
+# HTTPS in front of the application. Caddy obtains and renews the certificate for {$DOMAIN} automatically
+# (the domain's DNS A/AAAA record must point to this server and ports 80/443 must be open).
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(self), microphone=(), geolocation=()"
+		-Server
+	}
+
+	# Excel / CSV uploads are sent base64 in JSON (6 MB file ≈ 8 MB request)
+	request_body {
+		max_size 12MB
+	}
+
+	reverse_proxy app:3000 {
+		health_uri /api/health
+		health_interval 30s
+	}
+}

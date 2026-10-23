@@ -1,0 +1,15 @@
+# Kept out of the Docker build context: secrets, local data and build output.
+.env
+.env.*
+!.env.example
+.git
+.next
+node_modules
+.local
+.e2e-tmp
+backups
+secrets
+*.tsbuildinfo
+*.pdf
+*.make
+tüik veri

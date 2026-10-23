@@ -1,0 +1,13 @@
+*.tsbuildinfo
+.e2e-tmp
+.next
+next-env.d.ts
+node_modules
+src/generated
+.local
+
+# secrets and server data — never commit (the examples are kept)
+.env*
+!.env.example
+backups
+secrets
